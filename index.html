@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WellSpring Studio — Print Quote</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Sora:wght@300;400;600;700&display=swap');
+
+  :root {
+    --bg: #0a0f0a;
+    --surface: #101610;
+    --surface2: #161d16;
+    --border: #1e2a1e;
+    --accent: #00C4A0;
+    --accent-dim: #00c4a020;
+    --accent-mid: #00c4a060;
+    --text: #e8f0e8;
+    --text-dim: #7a9a7a;
+    --text-muted: #3d5c3d;
+    --danger: #ff6b6b;
+    --warn: #ffb347;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Sora', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Noise texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.4;
+  }
+
+  .app { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 32px 24px 80px; }
+
+  /* Header */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 48px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logo-mark {
+    width: 42px; height: 42px;
+    background: var(--accent);
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .logo-mark svg { width: 20px; height: 20px; }
+
+  .brand h1 {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+
+  .brand p {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+
+  /* Layout */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    gap: 24px;
+    align-items: start;
+  }
+
+  /* Upload zone */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    padding: 48px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .upload-zone::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 50% 50%, var(--accent-dim) 0%, transparent 70%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .upload-zone:hover::before,
+  .upload-zone.drag-over::before { opacity: 1; }
+
+  .upload-zone:hover,
+  .upload-zone.drag-over {
+    border-color: var(--accent-mid);
+    background: var(--surface2);
+  }
+
+  .upload-icon {
+    width: 64px; height: 64px;
+    margin: 0 auto 16px;
+    background: var(--accent-dim);
+    border: 1px solid var(--accent-mid);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .upload-icon svg { width: 28px; height: 28px; color: var(--accent); }
+
+  .upload-zone h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+
+  .upload-zone p {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  .upload-zone .file-types {
+    display: inline-flex;
+    gap: 6px;
+    margin-top: 16px;
+  }
+
+  .tag {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    padding: 3px 8px;
+    background: var(--accent-dim);
+    border: 1px solid var(--accent-mid);
+    border-radius: 4px;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+  }
+
+  #file-input { display: none; }
+
+  /* Preview panel */
+  .preview-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    display: none;
+  }
+
+  .preview-panel.visible { display: block; }
+
+  #canvas-container {
+    width: 100%;
+    height: 300px;
+    background: var(--surface2);
+    position: relative;
+  }
+
+  #preview-canvas { width: 100% !important; height: 100% !important; }
+
+  .canvas-controls {
+    position: absolute;
+    bottom: 8px; right: 8px;
+    display: flex; gap: 6px;
+  }
+
+  .canvas-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-dim);
+    font-size: 0.7rem;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-family: 'Space Mono', monospace;
+    transition: all 0.2s;
+  }
+  .canvas-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .model-info {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .model-info .filename {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--accent);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 4px;
+  }
+
+  .model-info .dims {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+  }
+
+  /* Slice button */
+  .slice-btn {
+    width: 100%;
+    padding: 14px;
+    background: var(--accent);
+    color: #0a0f0a;
+    border: none;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .slice-btn:hover { background: #00ddb5; }
+  .slice-btn:disabled { background: var(--text-muted); color: var(--bg); cursor: not-allowed; }
+
+  /* Progress */
+  .progress-wrap {
+    padding: 16px;
+    display: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .progress-wrap.visible { display: block; }
+
+  .progress-label {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+    font-family: 'Space Mono', monospace;
+  }
+
+  .progress-bar {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.3s ease;
+    border-radius: 2px;
+  }
+
+  /* Sidebar */
+  .sidebar { display: flex; flex-direction: column; gap: 16px; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .card-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-header h3 {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .card-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .card-body { padding: 16px; }
+
+  /* Settings */
+  .setting-row {
+    margin-bottom: 16px;
+  }
+
+  .setting-row:last-child { margin-bottom: 0; }
+
+  .setting-row label {
+    display: block;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+    letter-spacing: 0.05em;
+  }
+
+  .setting-row select,
+  .setting-row input[type="number"] {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 8px 10px;
+    font-family: 'Sora', sans-serif;
+    font-size: 0.82rem;
+    outline: none;
+    transition: border-color 0.2s;
+    appearance: none;
+  }
+
+  .setting-row select:focus,
+  .setting-row input[type="number"]:focus {
+    border-color: var(--accent-mid);
+  }
+
+  .setting-row select option { background: var(--surface2); }
+
+  /* Stat grid */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .stat-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    transition: border-color 0.3s;
+  }
+
+  .stat-box.highlight { border-color: var(--accent-mid); }
+
+  .stat-label {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    font-family: 'Space Mono', monospace;
+  }
+
+  .stat-value {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .stat-value.accent { color: var(--accent); }
+  .stat-value.pending { color: var(--text-muted); font-size: 0.85rem; }
+
+  /* Quote output */
+  .quote-total {
+    background: var(--accent-dim);
+    border: 1px solid var(--accent-mid);
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    margin-bottom: 12px;
+  }
+
+  .quote-total .label {
+    font-size: 0.68rem;
+    color: var(--accent);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-family: 'Space Mono', monospace;
+    margin-bottom: 6px;
+  }
+
+  .quote-total .amount {
+    font-family: 'Space Mono', monospace;
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+  }
+
+  .quote-total .sub {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    margin-top: 6px;
+  }
+
+  .quote-breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .breakdown-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .breakdown-row:last-child { border-bottom: none; }
+  .breakdown-row span:last-child { color: var(--text); font-family: 'Space Mono', monospace; }
+
+  .note-box {
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: var(--surface2);
+    border-left: 2px solid var(--accent);
+    border-radius: 0 6px 6px 0;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  /* Empty state in stats */
+  .empty-stats {
+    text-align: center;
+    padding: 24px 0;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    line-height: 1.6;
+  }
+
+  .empty-stats svg { margin: 0 auto 10px; display: block; opacity: 0.3; }
+
+  /* Status badge */
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.68rem;
+    font-family: 'Space Mono', monospace;
+    padding: 3px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.06em;
+  }
+
+  .status-badge.slicing {
+    background: rgba(0,196,160,0.1);
+    color: var(--accent);
+    border: 1px solid var(--accent-mid);
+  }
+
+  .status-badge .dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: pulse 1s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* Upload area replacement */
+  .reupload-btn {
+    width: 100%;
+    padding: 10px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-dim);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .reupload-btn:hover { border-color: var(--accent-mid); color: var(--accent); }
+
+  /* Loading kiri */
+  .kiri-loading {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(10,15,10,0.92);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+  }
+
+  .kiri-loading.visible { display: flex; }
+
+  .kiri-spinner {
+    width: 48px; height: 48px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .main-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header>
+    <div class="logo-mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#0a0f0a" stroke-width="2.5" stroke-linecap="round">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+        <path d="M2 17l10 5 10-5"/>
+        <path d="M2 12l10 5 10-5"/>
+      </svg>
+    </div>
+    <div class="brand">
+      <h1>WellSpring Studio</h1>
+      <p>Instant Print Quote Generator</p>
+    </div>
+  </header>
+
+  <div class="main-grid">
+    <!-- Left column -->
+    <div class="left-col">
+      <!-- Upload zone -->
+      <div class="upload-zone" id="upload-zone">
+        <input type="file" id="file-input" accept=".stl,.obj">
+        <div class="upload-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+        </div>
+        <h2>Drop your model here</h2>
+        <p>Or click to browse your files.<br>All slicing happens in your browser — nothing is uploaded.</p>
+        <div class="file-types">
+          <span class="tag">STL</span>
+          <span class="tag">OBJ</span>
+        </div>
+      </div>
+
+      <!-- Preview panel -->
+      <div class="preview-panel" id="preview-panel" style="margin-top:16px;">
+        <div id="canvas-container">
+          <canvas id="preview-canvas"></canvas>
+          <div class="canvas-controls">
+            <button class="canvas-btn" onclick="resetCamera()">Reset view</button>
+          </div>
+        </div>
+        <div class="model-info">
+          <div class="filename" id="model-filename">—</div>
+          <div class="dims" id="model-dims">—</div>
+        </div>
+
+        <!-- Progress -->
+        <div class="progress-wrap" id="progress-wrap">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <div class="progress-label" id="progress-label">Slicing...</div>
+            <div class="status-badge slicing"><div class="dot"></div><span id="status-text">WORKING</span></div>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+        </div>
+
+        <button class="slice-btn" id="slice-btn" disabled onclick="runSlice()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          Slice &amp; Quote
+        </button>
+        <button class="reupload-btn" onclick="resetUpload()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 019-9 9 9 0 016.36 2.64L21 9"/><path d="M21 3v6h-6"/></svg>
+          Load different file
+        </button>
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+
+      <!-- Settings -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot"></div>
+          <h3>Print Settings</h3>
+        </div>
+        <div class="card-body">
+          <div class="setting-row">
+            <label>Material</label>
+            <select id="material" onchange="updateQuote()">
+              <option value="pla">PLA / PLA+</option>
+              <option value="tpu">TPU (Flexible)</option>
+              <option value="wood">Wood PLA</option>
+              <option value="multicolor">Multi-Color PLA</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <label>Layer Height</label>
+            <select id="layer-height" onchange="updateQuote()">
+              <option value="0.1">0.10 mm — Fine</option>
+              <option value="0.15">0.15 mm — Detail</option>
+              <option value="0.2" selected>0.20 mm — Standard</option>
+              <option value="0.3">0.30 mm — Draft</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <label>Infill %</label>
+            <select id="infill" onchange="updateQuote()">
+              <option value="10">10% — Decorative</option>
+              <option value="20" selected>20% — Standard</option>
+              <option value="40">40% — Structural</option>
+              <option value="60">60% — Heavy duty</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <label>Quantity</label>
+            <input type="number" id="quantity" value="1" min="1" max="50" onchange="updateQuote()">
+          </div>
+        </div>
+      </div>
+
+      <!-- Slice results -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot"></div>
+          <h3>Slice Data</h3>
+        </div>
+        <div class="card-body" id="stats-body">
+          <div class="empty-stats">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+              <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+            </svg>
+            Upload a model and hit<br><strong>Slice &amp; Quote</strong> to see results.
+          </div>
+        </div>
+      </div>
+
+      <!-- Quote -->
+      <div class="card" id="quote-card" style="display:none;">
+        <div class="card-header">
+          <div class="card-dot"></div>
+          <h3>Your Quote</h3>
+        </div>
+        <div class="card-body">
+          <div class="quote-total">
+            <div class="label">Estimated Total</div>
+            <div class="amount" id="quote-total">$0.00</div>
+            <div class="sub" id="quote-sub">for 1 unit</div>
+          </div>
+          <div class="quote-breakdown" id="quote-breakdown"></div>
+          <div class="note-box">
+            Quotes are estimates based on sliced filament usage + machine time. Final pricing may vary for complex supports, multi-color, or rush orders. Reach out to confirm.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Kiri loading overlay -->
+<div class="kiri-loading" id="kiri-loading">
+  <div class="kiri-spinner"></div>
+  <span>Loading Kiri:Moto engine...</span>
+</div>
+
+<!-- Hidden iframe for Kiri engine worker scope -->
+<div id="kiri-container" style="display:none;"></div>
+
+<script>
+// ─── Pricing config ───────────────────────────────────────────────────────────
+const PRICING = {
+  materials: {
+    pla:        { name: 'PLA / PLA+',      costPerGram: 0.04,  label: '~$20/kg' },
+    tpu:        { name: 'TPU (Flexible)',   costPerGram: 0.07,  label: '~$35/kg' },
+    wood:       { name: 'Wood PLA',         costPerGram: 0.06,  label: '~$28/kg' },
+    multicolor: { name: 'Multi-Color PLA',  costPerGram: 0.08,  label: '~$40/kg' },
+  },
+  machineRatePerHr: 4.50,   // cost per hour of machine time
+  markup: 2.2,               // margin multiplier
+  minimum: 8.00,             // minimum order price
+  setupFee: 2.00,            // per-order setup fee
+  // Kiri tends to underestimate slightly vs real printers
+  timeCorrection: 1.18,
+  // Kiri weight estimates are pretty close, small fudge for waste
+  weightCorrection: 1.05,
+};
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let sliceData = null;   // { grams, minutes } from kiri
+let kiriEngine = null;
+let kiriReady = false;
+let loadedFileData = null;
+let loadedFileName = '';
+
+// Three.js
+let renderer, scene, camera, mesh, animFrameId;
+let isDragging = false, lastMouse = { x: 0, y: 0 };
+let spherical = { theta: 0.6, phi: 1.1, radius: 3 };
+
+// ─── Upload / drag-drop ───────────────────────────────────────────────────────
+const uploadZone = document.getElementById('upload-zone');
+const fileInput  = document.getElementById('file-input');
+
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+function resetUpload() {
+  document.getElementById('preview-panel').classList.remove('visible');
+  uploadZone.style.display = '';
+  sliceData = null;
+  loadedFileData = null;
+  document.getElementById('stats-body').innerHTML = `
+    <div class="empty-stats">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+      </svg>
+      Upload a model and hit<br><strong>Slice & Quote</strong> to see results.
+    </div>`;
+  document.getElementById('quote-card').style.display = 'none';
+  if (renderer) { renderer.dispose(); renderer = null; }
+  if (animFrameId) cancelAnimationFrame(animFrameId);
+  fileInput.value = '';
+}
+
+function handleFile(file) {
+  loadedFileName = file.name;
+  const reader = new FileReader();
+  reader.onload = e => {
+    loadedFileData = e.target.result;
+    uploadZone.style.display = 'none';
+    document.getElementById('preview-panel').classList.add('visible');
+    document.getElementById('model-filename').textContent = file.name;
+    sliceData = null;
+    document.getElementById('quote-card').style.display = 'none';
+    renderPreview(loadedFileData, file.name);
+    initKiri().then(() => {
+      document.getElementById('slice-btn').disabled = false;
+    });
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ─── Three.js STL Preview ─────────────────────────────────────────────────────
+function renderPreview(buffer, filename) {
+  const container = document.getElementById('canvas-container');
+  const canvas    = document.getElementById('preview-canvas');
+
+  if (renderer) { renderer.dispose(); cancelAnimationFrame(animFrameId); }
+
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setSize(container.clientWidth, container.clientHeight);
+  renderer.setClearColor(0x161d16, 1);
+
+  scene  = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.01, 10000);
+
+  // Lights
+  const amb = new THREE.AmbientLight(0xffffff, 0.4);
+  scene.add(amb);
+  const dir1 = new THREE.DirectionalLight(0x00C4A0, 0.8);
+  dir1.position.set(5, 10, 5);
+  scene.add(dir1);
+  const dir2 = new THREE.DirectionalLight(0xffffff, 0.5);
+  dir2.position.set(-5, -3, -5);
+  scene.add(dir2);
+
+  // Parse STL
+  const geo = parseSTL(buffer, filename.toLowerCase().endsWith('.obj') ? 'obj' : 'stl');
+  geo.computeBoundingBox();
+  const bb  = geo.boundingBox;
+  const cx  = (bb.min.x + bb.max.x) / 2;
+  const cy  = (bb.min.y + bb.max.y) / 2;
+  const cz  = (bb.min.z + bb.max.z) / 2;
+  const sz  = Math.max(bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z);
+  geo.translate(-cx, -cy, -cz);
+
+  // Model dimensions label
+  const dx = (bb.max.x - bb.min.x).toFixed(1);
+  const dy = (bb.max.y - bb.min.y).toFixed(1);
+  const dz = (bb.max.z - bb.min.z).toFixed(1);
+  document.getElementById('model-dims').textContent = `${dx} × ${dy} × ${dz} mm`;
+
+  const mat  = new THREE.MeshPhongMaterial({ color: 0x00C4A0, specular: 0x004d3d, shininess: 60, flatShading: false });
+  mesh = new THREE.Mesh(geo, mat);
+  scene.add(mesh);
+
+  spherical.radius = sz * 1.8;
+  updateCamera();
+
+  // Mouse / touch orbit
+  canvas.addEventListener('mousedown', e => { isDragging = true; lastMouse = { x: e.clientX, y: e.clientY }; });
+  window.addEventListener('mouseup',   () => { isDragging = false; });
+  window.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    const dx = e.clientX - lastMouse.x;
+    const dy = e.clientY - lastMouse.y;
+    spherical.theta -= dx * 0.01;
+    spherical.phi    = Math.max(0.05, Math.min(Math.PI - 0.05, spherical.phi + dy * 0.01));
+    lastMouse = { x: e.clientX, y: e.clientY };
+    updateCamera();
+  });
+  canvas.addEventListener('wheel', e => {
+    spherical.radius *= 1 + e.deltaY * 0.001;
+    spherical.radius  = Math.max(sz * 0.5, Math.min(sz * 6, spherical.radius));
+    updateCamera();
+    e.preventDefault();
+  }, { passive: false });
+
+  function animate() {
+    animFrameId = requestAnimationFrame(animate);
+    renderer.render(scene, camera);
+  }
+  animate();
+}
+
+function updateCamera() {
+  if (!camera) return;
+  camera.position.set(
+    spherical.radius * Math.sin(spherical.phi) * Math.sin(spherical.theta),
+    spherical.radius * Math.cos(spherical.phi),
+    spherical.radius * Math.sin(spherical.phi) * Math.cos(spherical.theta)
+  );
+  camera.lookAt(0, 0, 0);
+}
+
+function resetCamera() {
+  spherical.theta = 0.6; spherical.phi = 1.1;
+  updateCamera();
+}
+
+function parseSTL(buffer, type) {
+  // Binary STL
+  const geo = new THREE.BufferGeometry();
+  const dv  = new DataView(buffer);
+  const numTri = dv.getUint32(80, true);
+  const verts  = new Float32Array(numTri * 9);
+  const norms  = new Float32Array(numTri * 9);
+  let offset   = 84;
+  for (let i = 0; i < numTri; i++) {
+    const nx = dv.getFloat32(offset,     true);
+    const ny = dv.getFloat32(offset + 4, true);
+    const nz = dv.getFloat32(offset + 8, true);
+    offset += 12;
+    for (let v = 0; v < 3; v++) {
+      const base = i * 9 + v * 3;
+      verts[base]     = dv.getFloat32(offset,     true);
+      verts[base + 1] = dv.getFloat32(offset + 4, true);
+      verts[base + 2] = dv.getFloat32(offset + 8, true);
+      norms[base] = nx; norms[base + 1] = ny; norms[base + 2] = nz;
+      offset += 12;
+    }
+    offset += 2; // attribute byte count
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+  geo.setAttribute('normal',   new THREE.BufferAttribute(norms, 3));
+  return geo;
+}
+
+// ─── Kiri:Moto Engine ─────────────────────────────────────────────────────────
+function initKiri() {
+  if (kiriReady) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    document.getElementById('kiri-loading').classList.add('visible');
+    const script = document.createElement('script');
+    script.src = 'https://grid.space/kiri/engine.js';
+    script.onload = () => {
+      document.getElementById('kiri-loading').classList.remove('visible');
+      kiriEngine = new self.kiri.Engine();
+      kiriReady = true;
+      resolve();
+    };
+    script.onerror = () => {
+      document.getElementById('kiri-loading').classList.remove('visible');
+      alert('Could not load Kiri:Moto engine. Check your internet connection.');
+      reject();
+    };
+    document.head.appendChild(script);
+  });
+}
+
+async function runSlice() {
+  if (!kiriEngine || !loadedFileData) return;
+
+  const btn = document.getElementById('slice-btn');
+  btn.disabled = true;
+
+  const progressWrap = document.getElementById('progress-wrap');
+  const progressFill = document.getElementById('progress-fill');
+  const progressLabel = document.getElementById('progress-label');
+  const statusText   = document.getElementById('status-text');
+
+  progressWrap.classList.add('visible');
+  progressFill.style.width = '5%';
+  progressLabel.textContent = 'Parsing model...';
+  statusText.textContent = 'PARSING';
+
+  const layerHeight = parseFloat(document.getElementById('layer-height').value);
+  const infill      = parseInt(document.getElementById('infill').value);
+
+  let gramsFinal   = null;
+  let minutesFinal = null;
+  let gcodeLines   = 0;
+
+  try {
+    kiriEngine.setListener(ev => {
+      if (ev.parsed) {
+        progressFill.style.width = '15%';
+        progressLabel.textContent = 'Slicing layers...';
+        statusText.textContent = 'SLICING';
+      }
+      if (ev.slice) {
+        progressFill.style.width = '45%';
+        progressLabel.textContent = 'Generating toolpaths...';
+        statusText.textContent = 'TOOLPATHS';
+      }
+      if (ev.prepare && ev.prepare.update !== undefined) {
+        const pct = 45 + Math.round(ev.prepare.update * 35);
+        progressFill.style.width = pct + '%';
+      }
+      if (ev.prepare && ev.prepare.done) {
+        progressFill.style.width = '82%';
+        progressLabel.textContent = 'Exporting G-code...';
+        statusText.textContent = 'EXPORT';
+      }
+      if (ev.export && ev.export.segment) {
+        gcodeLines += ev.export.segment.split('\n').length;
+      }
+    });
+
+    kiriEngine
+      .setMode('FDM')
+      .setDevice({
+        extruders: [{ extFilament: 1.75 }],
+      })
+      .setProcess({
+        sliceHeight: layerHeight,
+        sliceFillSparse: infill / 100,
+        sliceSupportEnable: false,
+        outputBrimCount: 0,
+        sliceShells: 3,
+        sliceTopLayers: 3,
+        sliceBottomLayers: 3,
+      });
+
+    await kiriEngine.parse(loadedFileData);
+    progressFill.style.width = '20%';
+
+    await kiriEngine.slice();
+    progressFill.style.width = '50%';
+
+    await kiriEngine.prepare();
+    progressFill.style.width = '82%';
+
+    const gcode = await kiriEngine.export();
+    progressFill.style.width = '100%';
+    progressLabel.textContent = 'Done!';
+    statusText.textContent = 'DONE';
+
+    // Parse gcode for filament and time
+    const parsed = parseGcode(gcode);
+    gramsFinal   = parsed.grams;
+    minutesFinal = parsed.minutes;
+
+    sliceData = { grams: gramsFinal, minutes: minutesFinal };
+    updateQuote();
+
+    setTimeout(() => {
+      progressWrap.classList.remove('visible');
+      btn.disabled = false;
+      btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Re-Slice`;
+    }, 1200);
+
+  } catch (err) {
+    console.error('Slice error:', err);
+    progressWrap.classList.remove('visible');
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Slice &amp; Quote`;
+    showStatsError();
+  }
+}
+
+function parseGcode(gcode) {
+  // Look for Kiri's comments in gcode
+  let grams = null, minutes = null;
+
+  const lines = gcode.split('\n');
+  for (const line of lines) {
+    // Kiri outputs comments like: ; --- filament used: X.XXm / X.XXg
+    const filMatch = line.match(/filament\s+used[:\s]+[\d.]+m\s*\/\s*([\d.]+)g/i);
+    if (filMatch) grams = parseFloat(filMatch[1]);
+
+    // ; --- print time: X:XX:XX or Xm or Xh Xm
+    const timeMatch = line.match(/print\s+time[:\s]+(\d+)h?\s*:?\s*(\d+)m?\s*:?\s*(\d+)?s?/i);
+    if (timeMatch) {
+      const h = parseInt(timeMatch[1]) || 0;
+      const m = parseInt(timeMatch[2]) || 0;
+      const s = parseInt(timeMatch[3]) || 0;
+      minutes = h * 60 + m + s / 60;
+    }
+  }
+
+  // Fallback: estimate from gcode E values and move distances
+  if (grams === null) {
+    let totalE = 0;
+    for (const line of lines) {
+      if (!line.startsWith('G1') && !line.startsWith('G0')) continue;
+      const eMatch = line.match(/E([\d.]+)/);
+      if (eMatch) totalE = Math.max(totalE, parseFloat(eMatch[1]));
+    }
+    // ~2.4 g/m for 1.75mm PLA
+    const meters = totalE / 1000;
+    grams = meters * 2.4;
+  }
+
+  if (minutes === null) {
+    // Estimate from F (feedrate) and moves
+    let totalDist = 0;
+    let lastX = 0, lastY = 0, lastZ = 0, feedrate = 3000;
+    for (const line of lines) {
+      const fMatch = line.match(/F([\d.]+)/);
+      if (fMatch) feedrate = parseFloat(fMatch[1]);
+      if (line.startsWith('G1') || line.startsWith('G0')) {
+        const xm = line.match(/X([\d.]+)/); const ym = line.match(/Y([\d.]+)/); const zm = line.match(/Z([\d.]+)/);
+        const x = xm ? parseFloat(xm[1]) : lastX;
+        const y = ym ? parseFloat(ym[1]) : lastY;
+        const z = zm ? parseFloat(zm[1]) : lastZ;
+        const dist = Math.sqrt((x-lastX)**2 + (y-lastY)**2 + (z-lastZ)**2);
+        totalDist += dist;
+        lastX = x; lastY = y; lastZ = z;
+      }
+    }
+    minutes = (totalDist / (feedrate * 0.6)) / 60;
+  }
+
+  return { grams: Math.max(0.1, grams), minutes: Math.max(0.5, minutes) };
+}
+
+// ─── Quote calc ───────────────────────────────────────────────────────────────
+function updateQuote() {
+  if (!sliceData) return;
+
+  const material = document.getElementById('material').value;
+  const qty      = Math.max(1, parseInt(document.getElementById('quantity').value) || 1);
+  const mat      = PRICING.materials[material];
+
+  const gramsAdj   = sliceData.grams   * PRICING.weightCorrection;
+  const minutesAdj = sliceData.minutes * PRICING.timeCorrection;
+
+  const filamentCost = gramsAdj * mat.costPerGram;
+  const machineCost  = (minutesAdj / 60) * PRICING.machineRatePerHr;
+  const unitCost     = (filamentCost + machineCost) * PRICING.markup + PRICING.setupFee;
+  const unitPrice    = Math.max(PRICING.minimum, unitCost);
+  const totalPrice   = unitPrice * qty;
+
+  // Render stats
+  const hrs  = Math.floor(minutesAdj / 60);
+  const mins = Math.round(minutesAdj % 60);
+  const timeStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+
+  document.getElementById('stats-body').innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-box">
+        <div class="stat-label">Filament</div>
+        <div class="stat-value">${gramsAdj.toFixed(1)}<span style="font-size:0.6em;color:var(--text-dim)"> g</span></div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Print Time</div>
+        <div class="stat-value">${timeStr}</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Material Cost</div>
+        <div class="stat-value">$${filamentCost.toFixed(2)}</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Machine Time</div>
+        <div class="stat-value">$${machineCost.toFixed(2)}</div>
+      </div>
+    </div>`;
+
+  // Quote card
+  document.getElementById('quote-card').style.display = 'block';
+  document.getElementById('quote-total').textContent = `$${totalPrice.toFixed(2)}`;
+  document.getElementById('quote-sub').textContent = qty > 1 ? `for ${qty} units ($${unitPrice.toFixed(2)} each)` : 'for 1 unit';
+
+  document.getElementById('quote-breakdown').innerHTML = `
+    <div class="breakdown-row"><span>Material</span><span>${mat.name}</span></div>
+    <div class="breakdown-row"><span>Filament (${gramsAdj.toFixed(1)}g × ${mat.costPerGram * 100}¢/g)</span><span>$${filamentCost.toFixed(2)}</span></div>
+    <div class="breakdown-row"><span>Machine time (${timeStr} × $${PRICING.machineRatePerHr}/hr)</span><span>$${machineCost.toFixed(2)}</span></div>
+    <div class="breakdown-row"><span>Setup fee</span><span>$${PRICING.setupFee.toFixed(2)}</span></div>
+    <div class="breakdown-row"><span>Margin (${PRICING.markup}×)</span><span>—</span></div>
+    <div class="breakdown-row"><span style="color:var(--accent);font-weight:600">Unit price</span><span style="color:var(--accent);font-weight:600">$${unitPrice.toFixed(2)}</span></div>
+    ${qty > 1 ? `<div class="breakdown-row"><span>Quantity</span><span>× ${qty}</span></div>` : ''}
+  `;
+}
+
+function showStatsError() {
+  document.getElementById('stats-body').innerHTML = `
+    <div class="empty-stats" style="color:var(--danger)">
+      Slice failed. The model may be too complex or the engine timed out. Try a simpler model or reduce quality settings.
+    </div>`;
+}
+</script>
+</body>
+</html>
