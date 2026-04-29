@@ -1046,14 +1046,13 @@ async function runSlice() {
   progressLabel.textContent = 'Slicing layers...';
   statusText.textContent = 'SLICING';
 
-  // Create a blob URL from the ArrayBuffer — frame API load(url) works,
-  // parse(binary) via postMessage is a known broken issue (PR #442 unmerged)
-  const blob = new Blob([loadedFileData], { type: 'model/stl' });
-  const blobUrl = URL.createObjectURL(blob);
-  sendToKiri({ load: blobUrl });
-
-  // Kiri will fire a 'loaded' event, then we trigger slice
-  // We listen for that in handleKiriMessage before sending slice
+  // Blob URLs are origin-locked — Kiri on grid.space can't fetch them.
+  // Convert to base64 data URL which has no origin restriction.
+  const uint8 = new Uint8Array(loadedFileData);
+  let binary = '';
+  for (let i = 0; i < uint8.byteLength; i++) binary += String.fromCharCode(uint8[i]);
+  const dataUrl = 'data:application/octet-stream;base64,' + btoa(binary);
+  sendToKiri({ load: dataUrl });
 }
 
 function parseGcode(gcode) {
